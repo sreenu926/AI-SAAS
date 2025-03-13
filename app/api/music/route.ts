@@ -59,8 +59,24 @@ export async function POST(req: Request) {
       );
     }
 
+    // If response.audio is a URL, fetch it first
+    let audioStream: ReadableStream;
+
+    if (typeof response.audio === "string") {
+      const audioResponse = await fetch(response.audio);
+      if (!audioResponse.body) {
+        return NextResponse.json(
+          { error: "Failed to fetch audio stream" },
+          { status: 500 }
+        );
+      }
+      audioStream = audioResponse.body;
+    } else {
+      audioStream = response.audio as ReadableStream;
+    }
+
     // Convert ReadableStream to Buffer
-    const audioBuffer = await streamToBuffer(response.audio);
+    const audioBuffer = await streamToBuffer(audioStream);
 
     // Save to a temporary file (you can replace this with an upload to S3 or Cloudinary)
     const filePath = path.join(process.cwd(), "public", "generated_audio.mp3");
