@@ -1,8 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import Replicate from "replicate";
-import fs from "fs";
 import path from "path";
+import { promises as fsPromises } from "fs";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
@@ -11,13 +11,15 @@ const replicate = new Replicate({
 // Helper function to read a ReadableStream and convert it to a Buffer
 async function streamToBuffer(stream: ReadableStream) {
   const reader = stream.getReader();
-  const chunks = [];
-  let done = false;
+  const chunks: Uint8Array[] = [];
+  // let done = false;
 
-  while (!done) {
-    const { value, done: doneReading } = await reader.read();
-    if (value) chunks.push(value);
-    done = doneReading;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value instanceof Uint8Array) {
+      chunks.push(value);
+    }
   }
 
   return Buffer.concat(chunks);
@@ -63,14 +65,22 @@ export async function POST(req: Request) {
     let audioStream: ReadableStream;
 
     if (typeof response.audio === "string") {
-      const audioResponse = await fetch(response.audio);
-      if (!audioResponse.body) {
+      try {
+        const audioResponse = await fetch(response.audio);
+        if (!audioResponse.ok || !audioResponse.body) {
+          return NextResponse.json(
+            { error: "Failed to fetch audio stream" },
+            { status: 500 }
+          );
+        }
+        audioStream = audioResponse.body;
+      } catch (fetchError) {
+        console.error("[AUDIO_FETCH_ERROR]", fetchError);
         return NextResponse.json(
-          { error: "Failed to fetch audio stream" },
+          { error: "Error fetching audio stream" },
           { status: 500 }
         );
       }
-      audioStream = audioResponse.body;
     } else {
       audioStream = response.audio as ReadableStream;
     }
@@ -80,12 +90,21 @@ export async function POST(req: Request) {
 
     // Save to a temporary file (you can replace this with an upload to S3 or Cloudinary)
     const filePath = path.join(process.cwd(), "public", "generated_audio.mp3");
-    fs.writeFileSync(filePath, audioBuffer);
 
-    // Return public URL (adjust based on your deployment setup)
-    return NextResponse.json({
-      audio: "/generated_audio.mp3",
-    });
+    try {
+      await fsPromises.writeFile(filePath, audioBuffer);
+    } catch (fsError) {
+      console.error("[FILE_WRITE_ERROR]", fsError);
+      return NextResponse.json(
+        { error: "Failed to save audio file" },
+        { status: 500 }
+      );
+    }
+
+    // ✅ Ensure correct URL format for deployment environments
+    const audioUrl = `/generated_audio.mp3`;
+
+    return NextResponse.json({ audio: audioUrl });
   } catch (error) {
     console.error("[MUSIC_ERROR]", error);
     return new NextResponse("Internal error", { status: 500 });
