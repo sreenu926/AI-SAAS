@@ -2,7 +2,7 @@
 import * as z from "zod";
 import Heading from "@/components/heading";
 import { Code, Divide } from "lucide-react";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { formSchema } from "./constants";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +22,7 @@ import ReactMarkdown from "react-markdown";
 function CodePage() {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatCompletionMessageParam[]>([]);
+  const [history, setHistory] = useState<any[]>([]); // State to store history
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -32,12 +33,16 @@ function CodePage() {
 
   const isLoading = form.formState.isSubmitting;
 
+  const [renderKey, setRenderKey] = useState(0);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      const userMessage: ChatCompletionMessageParam = {
-        role: "user",
-        content: values.prompt,
-      };
+      const userMessage: ChatCompletionMessageParam & { firestoreId: string } =
+        {
+          role: "user",
+          content: values.prompt,
+          firestoreId: `user-${Date.now()}`,
+        };
 
       const newMessages = [...messages, userMessage];
 
@@ -45,14 +50,50 @@ function CodePage() {
         messages: newMessages,
       });
 
-      setMessages((current) => [...current, userMessage, response.data]);
+      const botMessage: ChatCompletionMessageParam & { firestoreId: string } = {
+        ...response.data,
+        firestoreId: `bot-${Date.now()}`, // Generate firestoreId
+      };
+
+      setMessages((current) => [botMessage, userMessage, ...current]);
+
+      // setMessages((current) => [...current, userMessage, response.data]);
+      // setMessages((current) => [response.data, userMessage, ...current]);
 
       form.reset();
     } catch (error: any) {
-      // TODO: Open Pro Model
       console.log(error);
-    } finally {
-      router.refresh();
+    }
+  };
+
+  useEffect(() => {
+    setRenderKey((prevKey) => prevKey + 1); // Force re-render when messages change
+    fetchHistory();
+  }, [messages]);
+
+  const fetchHistory = async () => {
+    try {
+      const response = await axios.get("/api/code");
+      setHistory(response.data);
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const deleteCode = async (codeId: string) => {
+    console.log("Deleting code with ID:", codeId); // Verify codeId
+    try {
+      await axios.delete(`/api/code?codeId=${codeId}`);
+      setHistory((prev) => prev.filter((item) => item.id !== codeId));
+    } catch (error: any) {
+      console.error(
+        "Error deleting code:",
+        error.response?.data || error.message
+      );
     }
   };
 
@@ -105,12 +146,13 @@ function CodePage() {
               <Loader />
             </div>
           )}
-          {messages.length === 0 && !isLoading && (
+          {history.length === 0 && messages.length === 0 && !isLoading && (
             <div>
               <Empty label="No conversation started yet." />
             </div>
           )}
           <div className="flex flex-col-reverse gap-y-4">
+            {/* Display messages from current session */}
             {messages.map((message, index) => (
               <div
                 key={index}
@@ -138,6 +180,48 @@ function CodePage() {
                 </ReactMarkdown>
               </div>
             ))}
+
+            {/* Display messages from history */}
+            {history.map((item) =>
+              item.messages.map(
+                (message: ChatCompletionMessageParam, index: number) => (
+                  <div
+                    key={`${item.id}-${index}`}
+                    className={cn(
+                      "p-2 w-full flex flex-items-start gap-x-8 rounded-lg",
+                      message.role === "user"
+                        ? "bg-white border px-4 border-black/10 text-lg"
+                        : "bg-muted flex flex-col text-sm overflow-hidden leading-7"
+                    )}
+                  >
+                    {message.role === "user" ? <UserAvatar /> : <BotAvatar />}
+                    <ReactMarkdown
+                      components={{
+                        pre: ({ node, ...props }) => (
+                          <div className="overflow-auto w-full my-2 bg-black/10 p-2 rounded-lg">
+                            <pre {...props} />
+                          </div>
+                        ),
+                        code: ({ node, ...props }) => (
+                          <code
+                            className="bg-black/10 rounded-lg p-1"
+                            {...props}
+                          />
+                        ),
+                      }}
+                    >
+                      {String(message.content || "")}
+                    </ReactMarkdown>
+                    <button
+                      onClick={() => deleteCode(item.id)} // Add delete button
+                      className="text-white border-2 bg-black rounded-lg px-2 hover:bg-white font-bold hover:text-red-700 cursor-pointer text-sm ml-auto h-[30px]"
+                    >
+                      <p>X</p>
+                    </button>
+                  </div>
+                )
+              )
+            )}
           </div>
         </div>
       </div>

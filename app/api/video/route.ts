@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import Replicate from "replicate";
 
 const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_TOKEN,
+  auth: process.env.REPLICATE_VIDEO_API_TOKEN,
 });
 
 export async function POST(req: Request) {
