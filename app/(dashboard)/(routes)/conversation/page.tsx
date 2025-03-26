@@ -41,12 +41,15 @@ function ConversationPage() {
   const isLoading = form.formState.isSubmitting;
 
   const deleteMessage = async (firestoreId: string) => {
+    console.log("Deleting message with firestoreId:", firestoreId);
     try {
       await axios.delete(`/api/conversation?firestoreId=${firestoreId}`);
       setMessages((prev) =>
         prev.filter((msg) => msg.firestoreId !== firestoreId)
       );
-      fetchConversations();
+      // fetchConversations();
+      setTimeout(fetchConversations, 500);
+      console.log("Message deleted successfully:", firestoreId);
     } catch (error) {
       console.error("Error Deleting Message:", error);
     }
@@ -120,6 +123,10 @@ function ConversationPage() {
             ])
           ).values()
         );
+
+        uniqueMessages.forEach((msg) => {
+          console.log("Message firestoreId:", msg.firestoreId); // Log firestoreId
+        });
 
         setMessages(uniqueMessages);
       } else {

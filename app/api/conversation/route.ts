@@ -81,8 +81,11 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const authData = await auth();
-    const userId = authData.userId;
+    if (!authData?.userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
+    const userId = authData.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -110,55 +113,36 @@ export async function DELETE(req: Request) {
     }
 
     const userData = userDocSnapshot.data();
-    const conversations = userData?.conversations || [];
-
+    let conversations = userData?.conversations || [];
     const parts = firestoreId.split("-");
-    const conversationIndex = parseInt(parts[1], 10);
-    const identifier = parts[2];
+    const identifier = parts[1];
     const messageIndex =
-      parts.length === 4 && identifier === "message"
-        ? parseInt(parts[3], 10)
+      parts.length === 3 && identifier === "message"
+        ? parseInt(parts[2], 10)
         : null;
 
-    // Validate parsed data
-    if (
-      isNaN(conversationIndex) ||
-      (identifier === "message" && isNaN(messageIndex)) ||
-      !conversations[conversationIndex]
-    ) {
-      console.error("Invalid Firestore ID:", { firestoreId, conversations });
-      return NextResponse.json(
-        { error: "Invalid Firestore ID" },
-        { status: 400 }
-      );
-    }
-
-    if (identifier === "message") {
-      if (
-        conversations[conversationIndex].messages &&
-        conversations[conversationIndex].messages[messageIndex]
-      ) {
-        conversations[conversationIndex].messages.splice(messageIndex, 1);
-      } else {
-        return NextResponse.json(
-          { error: "Message not found" },
-          { status: 404 }
-        );
+    let updatedConversations = conversations.map(
+      (conversation: { messages: any[]; response: any }) => {
+        if (identifier === "message") {
+          conversation.messages = conversation.messages.filter(
+            (msg: any, index: number) => index !== messageIndex
+          );
+        } else if (identifier === "response") {
+          delete conversation.response;
+        }
+        return conversation;
       }
-    } else if (identifier === "response") {
-      delete conversations[conversationIndex].response;
-    }
+    );
 
-    if (
-      conversations[conversationIndex].messages &&
-      conversations[conversationIndex].messages.length === 0 &&
-      !conversations[conversationIndex].response
-    ) {
-      conversations.splice(conversationIndex, 1);
-    }
+    // Remove empty conversations
+    updatedConversations = updatedConversations.filter(
+      (conv: { messages: string | any[]; response: any }) =>
+        conv.messages?.length || conv.response
+    );
 
-    await updateDoc(userDocRef, { conversations: conversations }); // Use mutable conversations
+    await updateDoc(userDocRef, { conversations: updatedConversations });
 
+    console.log(`Deleted all copies of message with ID: ${firestoreId}`);
     return NextResponse.json({
       success: true,
       message: "Message deleted successfully",
