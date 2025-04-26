@@ -154,21 +154,21 @@ export async function GET() {
   }
 }
 
-export async function DELETE(req: {
-  json: () => PromiseLike<{ id: any; url: any }> | { id: any; url: any };
-}) {
-  try {
-    const { id, url } = await req.json();
-    if (!id || !url)
-      return new NextResponse("Missing parameters", { status: 400 });
+// export async function DELETE(req: {
+//   json: () => PromiseLike<{ id: any; url: any }> | { id: any; url: any };
+// }) {
+//   try {
+//     const { id, url } = await req.json();
+//     if (!id || !url)
+//       return new NextResponse("Missing parameters", { status: 400 });
 
-    const fileRef = ref(storage, url);
-    await deleteObject(fileRef);
-    await deleteDoc(doc(db, "music", id));
+//     const fileRef = ref(storage, url);
+//     await deleteObject(fileRef);
+//     await deleteDoc(doc(db, "music", id));
 
-    return new NextResponse("Deleted successfully", { status: 200 });
-  } catch (error) {
-    console.error("[DELETE_ERROR]", error);
-    return new NextResponse("Internal error", { status: 500 });
-  }
-}
+//     return new NextResponse("Deleted successfully", { status: 200 });
+//   } catch (error) {
+//     console.error("[DELETE_ERROR]", error);
+//     return new NextResponse("Internal error", { status: 500 });
+//   }
+// }
