@@ -34,13 +34,13 @@ const tools = [
     bgColor: "bg-pink-700/10",
     href: "/image",
   },
-  {
-    label: "Video Generation",
-    icon: VideoIcon,
-    color: "text-orange-700",
-    bgColor: "bg-orange-700/10",
-    href: "/video",
-  },
+  // {
+  //   label: "Video Generation",
+  //   icon: VideoIcon,
+  //   color: "text-orange-700",
+  //   bgColor: "bg-orange-700/10",
+  //   href: "/video",
+  // },
   {
     label: "Code Generation",
     icon: Code,

@@ -1,9 +1,38 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import Replicate from "replicate";
+import { initializeApp } from "firebase/app";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 import path from "path";
 import { promises as fsPromises } from "fs";
 
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_AUTHDOMAIN,
+  projectId: process.env.NEXT_PUBLIC_PROJECTID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_MESSAGINGSENDERID,
+  appId: process.env.NEXT_PUBLIC_APPID,
+};
+
+const app = initializeApp(firebaseConfig);
+const storage = getStorage(app);
+const db = getFirestore(app);
 const replicate = new Replicate({
   auth: process.env.REPLICATE_MUSIC_API_TOKEN,
 });
@@ -61,7 +90,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // If response.audio is a URL, fetch it first
+    // If response.audio is a URL, fetch it firsxs
     let audioStream: ReadableStream;
 
     if (typeof response.audio === "string") {
@@ -107,6 +136,39 @@ export async function POST(req: Request) {
     return NextResponse.json({ audio: audioUrl });
   } catch (error) {
     console.error("[MUSIC_ERROR]", error);
+    return new NextResponse("Internal error", { status: 500 });
+  }
+}
+
+export async function GET() {
+  try {
+    const querySnapshot = await getDocs(collection(db, "music"));
+    const musicList = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    return NextResponse.json(musicList);
+  } catch (error) {
+    console.error("[FETCH_ERROR]", error);
+    return new NextResponse("Internal error", { status: 500 });
+  }
+}
+
+export async function DELETE(req: {
+  json: () => PromiseLike<{ id: any; url: any }> | { id: any; url: any };
+}) {
+  try {
+    const { id, url } = await req.json();
+    if (!id || !url)
+      return new NextResponse("Missing parameters", { status: 400 });
+
+    const fileRef = ref(storage, url);
+    await deleteObject(fileRef);
+    await deleteDoc(doc(db, "music", id));
+
+    return new NextResponse("Deleted successfully", { status: 200 });
+  } catch (error) {
+    console.error("[DELETE_ERROR]", error);
     return new NextResponse("Internal error", { status: 500 });
   }
 }

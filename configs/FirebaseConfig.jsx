@@ -5,15 +5,15 @@ import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: "ai-saas-74e1a.firebaseapp.com",
-  projectId: "ai-saas-74e1a",
+  authDomain: process.env.NEXT_PUBLIC_AUTHDOMAIN,
+  projectId: process.env.NEXT_PUBLIC_PROJECTID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: "222996286203",
-  appId: "1:222996286203:web:5621698e1d7e84b5d7fe5e",
+  messagingSenderId: process.env.NEXT_PUBLIC_MESSAGINGSENDERID,
+  appId: process.env.NEXT_PUBLIC_APPID,
   measurementId: "G-6J40WB4R5Z",
 };
 
-// Initialize Firebase
+// Initialize Firebas
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const storage = getStorage(app);

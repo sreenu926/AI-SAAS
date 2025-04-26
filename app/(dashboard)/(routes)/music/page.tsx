@@ -1,8 +1,8 @@
 "use client";
 import * as z from "zod";
 import Heading from "@/components/heading";
-import { Music } from "lucide-react";
-import React, { useState } from "react";
+import { Music, Trash } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { formSchema } from "./constants";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,39 +13,63 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { Empty } from "@/components/empty";
 import { Loader } from "@/components/loader";
+import { db, storage } from "@/configs/FirebaseConfig";
+import {
+  collection,
+  getDocs,
+  deleteDoc,
+  doc,
+  addDoc,
+} from "firebase/firestore";
+import { ref, deleteObject } from "firebase/storage";
 
 function MusicPage() {
   const router = useRouter();
-  const [music, setMusic] = useState<string>();
+  const [musicList, setMusicList] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      prompt: "",
-    },
+    defaultValues: { prompt: "" },
   });
 
-  const isLoading = form.formState.isSubmitting;
+  useEffect(() => {
+    fetchMusic();
+  }, []);
+
+  const fetchMusic = async () => {
+    const querySnapshot = await getDocs(collection(db, "music"));
+    const musicData = querySnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    setMusicList(musicData);
+  };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      setMusic(null);
-
+      setIsLoading(true);
       const response = await axios.post("/api/music", values);
-      console.log("[API RESPONSE]", response.data);
-
       if (response.data && response.data.audio) {
-        setMusic((response.data as { audio: string }).audio);
-      } else {
-        console.error("Invalid API response", response.data);
+        await addDoc(collection(db, "music"), { url: response.data.audio });
+        fetchMusic();
       }
-
       form.reset();
-    } catch (error: any) {
-      // TODO: Open Pro Model
-      console.log(error);
+    } catch (error) {
+      console.error(error);
     } finally {
-      router.refresh();
+      setIsLoading(false);
+    }
+  };
+
+  const deleteMusic = async (id: string, url: string) => {
+    try {
+      await deleteDoc(doc(db, "music", id));
+      const fileRef = ref(storage, url);
+      await deleteObject(fileRef);
+      setMusicList((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      console.error("Error deleting music:", error);
     }
   };
 
@@ -59,55 +83,65 @@ function MusicPage() {
         bgColor="bg-emerald-500/10"
       />
       <div className="px-4 lg:px-8">
-        <div>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
+          >
+            <FormField
+              control={form.control}
+              name="prompt"
+              render={({ field }) => (
+                <FormItem className="col-span-12 lg:col-span-10">
+                  <FormControl>
+                    <Input
+                      className="border-0 outline-none focus-visible:ring-0"
+                      disabled={isLoading}
+                      placeholder="Piano solo"
+                      {...field}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <Button
+              className="col-span-12 lg:col-span-2 w-full"
+              disabled={isLoading}
+              variant="default"
+              size="lg"
             >
-              <FormField
-                control={form.control}
-                name="prompt"
-                render={({ field }) => (
-                  <FormItem className="col-span-12 lg:col-span-10">
-                    <FormControl className="m-0 p-0">
-                      <Input
-                        className="border-0 outline-none focus-visible:ring-0 focus-visible:ring-transparent"
-                        disabled={isLoading}
-                        placeholder="Piano solo"
-                        {...field}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <Button
-                className="col-span-12 cursor-pointer lg:col-span-2 w-full"
-                disabled={isLoading}
-                variant="default"
-                size="lg"
-              >
-                Generate
-              </Button>
-            </form>
-          </Form>
-        </div>
+              Generate
+            </Button>
+          </form>
+        </Form>
+
         <div className="space-y-4 mt-4">
           {isLoading && (
             <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
               <Loader />
             </div>
           )}
-          {!music && !isLoading && (
-            <div>
-              <Empty label="No music generated yet." />
+          {!isLoading && musicList.length === 0 && (
+            <Empty label="No music generated yet." />
+          )}
+          {musicList.map((music) => (
+            <div
+              key={music.id}
+              className="flex justify-between items-center bg-muted p-4 rounded-lg"
+            >
+              <audio controls className="w-full">
+                <source src={music.url} type="audio/mp3" />
+              </audio>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => deleteMusic(music.id, music.url)}
+                className="cursor-pointer hover:bg-black"
+              >
+                <Trash className="w-5 h-5" />
+              </Button>
             </div>
-          )}
-          {music && (
-            <audio controls className="w-full mt-8">
-              <source src={music} type="audio/mp3" />
-            </audio>
-          )}
+          ))}
         </div>
       </div>
     </div>
